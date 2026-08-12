@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Prisma's generated client — regenerated fresh on every
+    // `prisma generate`, so linting or "fixing" it is pointless (and it's
+    // minified/non-idiomatic output, not hand-written source anyway).
+    "app/generated/**",
   ]),
 ]);
 

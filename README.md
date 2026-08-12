@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Product Dashboard
 
-## Getting Started
+A Next.js dashboard for scraping semiconductor/board-manufacturer product
+listings, reviewing what changed, and keeping a product catalog in sync —
+either on demand, on a schedule, or via bulk Excel upload.
 
-First, run the development server:
+## What it does
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Products** — browse the product catalog, filter by name/supplier/
+  manufacturer/status, review pending changes (new / URL changed /
+  description changed / expired) and Approve, Reject, or Block them.
+  Export the current filtered view to Excel.
+- **Instant Triggering** — manually kick off a scan of one or all active
+  board manufacturers and watch scan runs progress to completion.
+- **Scheduled Triggering** — configure a recurring scan schedule (daily/
+  weekly/monthly, any hour/minute, any timezone) that runs automatically.
+- **File Upload** — bulk-create products from an Excel file, validated
+  row-by-row; failing uploads produce a downloadable error report instead
+  of a partial import.
+
+## Architecture — two processes, not one
+
+This app is **not** a single Next.js server. It's two separate always-on
+processes that must both be running:
+
+| Process | Command | Responsible for |
+|---|---|---|
+| **web** | `npm run start` (prod) / `npm run dev` (local) | Serving the dashboard UI and REST API |
+| **worker** | `npm run worker` | BullMQ workers that actually scrape, sync, import Excel files, and tick the DB-backed schedule every minute |
+
+If only `web` is deployed, the app will load fine but **scans, scheduled
+triggers, and file uploads will silently never process** — nothing will
+error, jobs will just sit unprocessed in the queue forever. See
+[Deploying](#deploying) below.
+
+Data layer: Postgres via Prisma, BullMQ/Redis for job queues, Clerk for
+auth, Mantine for UI, Redux Toolkit + RTK Query for all client-side data
+fetching.
+
+### Folder structure
+
+```
+app/                  Next.js App Router — pages, layouts, API routes
+features/
+  scanning/           The scraping engine + triggering a scan
+  products/           Product/board-manufacturer/semi-supplier data + sync logic
+  import-export/      Excel import and export
+  schedule/           The DB-backed recurring scan schedule
+  shared/             Cross-cutting utils (e.g. list-route sort parsing)
+lib/
+  queue/              BullMQ queue/worker definitions, the scheduler
+  redux/              The RTK Query API slice + store
+prisma/               Schema + migrations
+scripts/worker.ts      Entry point for the worker process
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local development
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Requirements: Node ≥22.17, a Postgres database, a Redis instance.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env   # fill in DATABASE_URL, REDIS_URL, Clerk keys
+npm install
+npx prisma migrate deploy
+npm run dev             # terminal 1 — the web app
+npm run worker          # terminal 2 — required for scans/uploads/schedule
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000).
 
-To learn more about Next.js, take a look at the following resources:
+> `npm run worker` runs via `tsx`, which does **not** hot-reload — restart
+> it after any change to `features/`, `lib/queue/`, or `scripts/worker.ts`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploying
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Both processes need to run continuously in production, against the same
+Postgres and Redis. A `Dockerfile` (multi-stage, two targets) and
+`docker-compose.yml` are included:
 
-## Deploy on Vercel
+```bash
+docker build --target web    -t product-dashboard-web    .
+docker build --target worker -t product-dashboard-worker .
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+On a platform that supports multiple services from one repo/image (Render,
+Railway, Fly.io, ECS, etc.), deploy `web` as the HTTP service and `worker`
+as a background worker service, both pointed at the same `DATABASE_URL`/
+`REDIS_URL`. Run `npx prisma migrate deploy` once before (or as part of)
+the first deploy.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For local end-to-end testing of exactly this two-service setup:
+
+```bash
+docker compose up --build
+docker compose exec worker npx prisma migrate deploy
+```
+
+Required environment variables are listed in `.env.example`.

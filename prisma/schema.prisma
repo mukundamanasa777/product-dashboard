@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model BoardManufacturer {
+  id                             Int                             @id @default(autoincrement())
+  name                           String                          @unique
+  status                         Boolean                         @default(true)
+  /// Scraping configuration
+  scraperConfig                  Json
+  /// Category URLs
+  pageUrls                       Json
+  /// Set when the site's product listing is rendered client-side (e.g. a
+  /// Vue/React SPA) and a plain HTTP fetch never sees real product markup —
+  /// scrapeProducts.ts uses a headless-browser fetch instead of axios for
+  /// this manufacturer only. Defaults to false, so existing manufacturers
+  /// (plain server-rendered HTML) are unaffected.
+  requiresBrowserRendering       Boolean                         @default(false)
+  createdAt                      DateTime                        @default(now())
+  updatedAt                      DateTime                        @updatedAt
+  boardManufacturerSemiSuppliers BoardManufacturerSemiSupplier[]
+  scanRuns                       ScanRun[]
+
+  @@map("board_manufacturers")
+}
+
+model SemiSupplier {
+  id                 Int                             @id @default(autoincrement())
+  name               String                          @unique
+  status             Boolean                         @default(true)
+  createdAt          DateTime                        @default(now())
+  updatedAt          DateTime                        @updatedAt
+  boardManufacturers BoardManufacturerSemiSupplier[]
+
+  @@map("semi_suppliers")
+}
+
+model BoardManufacturerSemiSupplier {
+  id                  Int               @id @default(autoincrement())
+  boardManufacturerId Int
+  semiSupplierId      Int
+  status              Boolean           @default(true)
+  boardManufacturer   BoardManufacturer @relation(fields: [boardManufacturerId], references: [id])
+  semiSupplier        SemiSupplier      @relation(fields: [semiSupplierId], references: [id])
+  products            Product[]
+
+  @@unique([boardManufacturerId, semiSupplierId, status])
+  @@map("board_manufacturer_semi_suppliers")
+}
+
+model Product {
+  id                              Int                           @id @default(autoincrement())
+  boardManufacturerSemiSupplierId Int
+  scanRunId                       Int?
+  name                            String
+  productUrl                      String
+  description                     String?
+  status                          ProductStatus                 @default(PENDING)
+  changeType                      ChangeType                    @default(NEW)
+  source                          ProductSource                 @default(SCRAPED)
+  createdAt                       DateTime                      @default(now())
+  updatedAt                       DateTime                      @updatedAt
+  remark                          Json?
+  boardManufacturerSemiSupplier   BoardManufacturerSemiSupplier @relation(fields: [boardManufacturerSemiSupplierId], references: [id])
+  scanRun                         ScanRun?                      @relation(fields: [scanRunId], references: [id])
+
+  @@unique([boardManufacturerSemiSupplierId, name])
+  @@index([boardManufacturerSemiSupplierId, status])
+  @@index([scanRunId])
+  @@map("products")
+}
+
+model ScanRun {
+  id                  Int               @id @default(autoincrement())
+  boardManufacturerId Int
+  status              ScanStatus        @default(PENDING)
+  triggerSource       TriggerSource     @default(MANUAL)
+  startedAt           DateTime          @default(now())
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  errorMessage        String?
+  jobId               String?
+  totalProducts       Int               @default(0)
+  newProducts         Int               @default(0)
+  updatedProducts     Int               @default(0)
+  removedProducts     Int               @default(0)
+  products            Product[]
+  boardManufacturer   BoardManufacturer @relation(fields: [boardManufacturerId], references: [id])
+
+  @@index([boardManufacturerId, startedAt])
+  @@map("scan_runs")
+}
+
+enum ProductStatus {
+  PENDING
+  APPROVED
+  BLOCKED
+}
+
+enum ProductSource {
+  SCRAPED
+  UPLOADED
+}
+
+enum FileUploadStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+model FileUpload {
+  id           Int              @id @default(autoincrement())
+  fileName     String
+  status       FileUploadStatus @default(PENDING)
+  /// The originally uploaded file — the async worker reads this to do the
+  /// actual parsing/validation, since the API request only enqueues a job.
+  sourceFile   Bytes
+  totalRows    Int?
+  createdCount Int?
+  errorCount   Int?
+  /// Structural failures (bad columns, empty file) — row-level failures
+  /// go in errorFile instead, not here.
+  errorMessage String?
+  /// Present only when row-level validation failed — the same downloadable
+  /// workbook the synchronous flow used to return directly in the response.
+  errorFile    Bytes?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([createdAt])
+  @@map("fileuploads")
+}
+
+enum ChangeType {
+  NONE
+  NEW
+  URL_CHANGED
+  DESCRIPTION_CHANGED
+  EXPIRED
+  UPDATED
+  RESTORED
+  /// Set by the products page's "Check All Links" tool — an active fetch
+  /// of the product's own URL came back broken (404, timeout, unreachable,
+  /// etc.), as opposed to EXPIRED, which means it vanished from a scan.
+  NOT_FOUND
+}
+
+enum ScanStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  /// Legacy value, superseded by PENDING/PROCESSING. Kept to avoid a
+  /// destructive enum-value removal migration; not used by application code.
+  RUNNING
+}
+
+enum TriggerSource {
+  MANUAL
+  SCHEDULED
+}
+
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model ScanSchedule {
+  id          Int               @id @default(autoincrement())
+  frequency   ScheduleFrequency @default(WEEKLY)
+  /// 0=Sunday..6=Saturday, used when frequency=WEEKLY
+  dayOfWeek   Int               @default(1)
+  /// 1-28, used when frequency=MONTHLY
+  dayOfMonth  Int               @default(1)
+  /// 0-23
+  hour        Int               @default(4)
+  /// 0-59
+  minute      Int               @default(0)
+  timezone    String            @default("UTC")
+  isActive    Boolean           @default(true)
+  /// Derived from the fields above; what the worker actually evaluates.
+  cronPattern String
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("scan_schedules")
+}
