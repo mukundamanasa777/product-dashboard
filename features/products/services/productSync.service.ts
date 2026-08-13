@@ -48,6 +48,15 @@ const dbMap = new Map(
   ])
 );
 
+// Fallback index for when a scraped product's name doesn't match anything
+// above: same URL, same link, different name means a rename, not a new
+// product replacing an expired one.
+const dbByUrlMap = new Map(
+  dbProducts.map(product => [
+    `${product.boardManufacturerSemiSupplierId}-${product.productUrl}`,
+    product,
+  ])
+);
 
 const newProducts = [];
 const updatedProducts = [];
@@ -64,7 +73,25 @@ for (const product of scrapedProducts) {
   const key = `${bmssId}-${product.name.toLowerCase()}`;
   visited.add(key);
 
-  const existing = dbMap.get(key);
+  let existing = dbMap.get(key);
+
+  // Name didn't match anything — before assuming this is a brand-new
+  // product, check whether it's actually an existing one that just got
+  // renamed (same URL, same link). Skip candidates already claimed by
+  // an earlier scraped product this run.
+  let renamedFromKey: string | null = null;
+  if (!existing) {
+    const urlKey = `${bmssId}-${product.productUrl}`;
+    const urlMatch = dbByUrlMap.get(urlKey);
+    if (urlMatch) {
+      const oldKey = `${bmssId}-${urlMatch.name.toLowerCase()}`;
+      if (!visited.has(oldKey)) {
+        existing = urlMatch;
+        renamedFromKey = oldKey;
+        visited.add(oldKey);
+      }
+    }
+  }
 
   // New Product
   if (!existing) {
@@ -81,6 +108,10 @@ for (const product of scrapedProducts) {
 
     continue;
   }
+
+  // Resolved via the URL fallback above => name differs by construction
+  // (that's the only way we get here without a name-key match).
+  const nameChanged = renamedFromKey !== null;
 
   const urlChanged =
     existing.productUrl !== product.productUrl;
@@ -99,8 +130,9 @@ for (const product of scrapedProducts) {
   // every run just re-asks the same question forever. Only an *actual*
   // content difference (or a truly EXPIRED product coming back, which is
   // real new information — it was gone, now it's not) reopens review.
-  if (urlChanged || descriptionChanged || wasExpired) {
+  if (nameChanged || urlChanged || descriptionChanged || wasExpired) {
     const remark: {
+      name?: { old: string; new: string };
       url?: { old: string; new: string };
       description?: { old: string | null; new: string };
       previousStatus: ProductStatus;
@@ -112,6 +144,9 @@ for (const product of scrapedProducts) {
       previousScanRunId: existing.scanRunId,
     };
 
+    if (nameChanged) {
+      remark.name = { old: existing.name, new: product.name };
+    }
     if (urlChanged) {
       remark.url = { old: existing.productUrl, new: product.productUrl };
     }
@@ -127,11 +162,13 @@ for (const product of scrapedProducts) {
       boardManufacturerSemiSupplierId: bmssId,
       name: product.name,
       remark,
-      changeType: urlChanged
-        ? ChangeType.URL_CHANGED
-        : wasExpired
-          ? ChangeType.RESTORED
-          : ChangeType.DESCRIPTION_CHANGED,
+      changeType: nameChanged
+        ? ChangeType.NAME_CHANGED
+        : urlChanged
+          ? ChangeType.URL_CHANGED
+          : wasExpired
+            ? ChangeType.RESTORED
+            : ChangeType.DESCRIPTION_CHANGED,
       status: ProductStatus.PENDING,
     });
 

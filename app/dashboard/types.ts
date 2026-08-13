@@ -24,9 +24,11 @@ export type ChangeType =
   | "EXPIRED"
   | "UPDATED"
   | "RESTORED"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "NAME_CHANGED";
 
 export interface ProductRemark {
+  name?: { old: string; new: string };
   url?: { old: string; new: string };
   description?: { old: string | null; new: string };
   previousStatus?: ProductStatus;

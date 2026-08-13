@@ -148,10 +148,8 @@ enum ChangeType {
   EXPIRED
   UPDATED
   RESTORED
-  /// Set by the products page's "Check All Links" tool — an active fetch
-  /// of the product's own URL came back broken (404, timeout, unreachable,
-  /// etc.), as opposed to EXPIRED, which means it vanished from a scan.
   NOT_FOUND
+  NAME_CHANGED
 }
 
 enum ScanStatus {

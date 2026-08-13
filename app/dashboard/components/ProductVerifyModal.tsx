@@ -72,7 +72,11 @@ export function ProductVerifyModal({
   // ("Blocked").
   const isConfirmedGone = isExpired || isNotFound;
   const hasRemark = !!product?.remark;
-  const hasFieldDiff = !!(product?.remark?.description || product?.remark?.url);
+  const hasFieldDiff = !!(
+    product?.remark?.name ||
+    product?.remark?.description ||
+    product?.remark?.url
+  );
   const isPending = product?.status === ProductStatus.PENDING;
 
   // "Approve"/"Reject" say the wrong thing for an EXPIRED/NOT_FOUND product
@@ -140,7 +144,21 @@ export function ProductVerifyModal({
                 Changes
               </Text>
 
-              {product.remark?.description && product.changeType === ChangeType.DESCRIPTION_CHANGED &&(
+              {product.remark?.name && (
+                <Stack gap={4}>
+                  <Text size="sm" fw={500}>
+                    Name
+                  </Text>
+                  <Text size="sm" c="red" td="line-through">
+                    {product.remark.name.old}
+                  </Text>
+                  <Text size="sm" c="green">
+                    {product.remark.name.new}
+                  </Text>
+                </Stack>
+              )}
+
+              {product.remark?.description && (
                 <Stack gap={4}>
                   <Text size="sm" fw={500}>
                     Description
@@ -154,7 +172,7 @@ export function ProductVerifyModal({
                 </Stack>
               )}
 
-              {product.remark?.url && product.changeType === ChangeType.URL_CHANGED && (
+              {product.remark?.url && (
                 <Stack gap={4}>
                   <Text size="sm" fw={500}>
                     URL

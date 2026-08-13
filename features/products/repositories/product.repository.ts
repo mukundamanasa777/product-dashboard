@@ -3,6 +3,7 @@ import { ChangeType, Prisma, ProductStatus } from "@/app/generated/prisma";
 import type { ParsedSort } from "@/features/shared/utils/sort";
 
 interface ProductRemark {
+  name?: { old: string; new: string };
   url?: { old: string; new: string };
   description?: { old: string | null; new: string };
   previousStatus?: ProductStatus;
@@ -283,6 +284,7 @@ export async function reject(id: number) {
   return prisma.product.update({
     where: { id },
     data: {
+      name: remark.name?.old ?? existing.name,
       productUrl: remark.url?.old ?? existing.productUrl,
       description: remark.description?.old ?? existing.description,
       status: remark.previousStatus,

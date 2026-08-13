@@ -13,6 +13,10 @@ interface ProductWithChanges {
   status: ProductStatus;
 
   remark: {
+    name?: {
+      old: string;
+      new: string;
+    };
     url?: {
       old: string;
       new: string;
@@ -80,6 +84,7 @@ export async function saveProducts(
             id: product.id,
           },
           data: {
+            ...(product.remark.name ? { name: product.remark.name.new } : {}),
             ...(product.remark.url ? { productUrl: product.remark.url.new } : {}),
             ...(product.remark.description
               ? { description: product.remark.description.new }
