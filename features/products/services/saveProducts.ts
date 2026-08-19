@@ -46,14 +46,24 @@ export async function saveProducts(
   expiredProducts: ExpiredProduct[] = [],
   scanRunId?: number,
 ) {
-  const duplicateCount = new Set(
-    newProducts.map(
-      (p) => `${p.boardManufacturerSemiSupplierId}-${p.name.toLowerCase()}`
-    )
-  ).size;
+  const seenKeys = new Set<string>();
+  const dedupedNewProducts = newProducts.filter((p) => {
+    const key = `${p.boardManufacturerSemiSupplierId}-${p.name.toLowerCase()}`;
 
-  if (duplicateCount !== newProducts.length) {
-    console.warn("Duplicate products found in newProducts");
+    if (seenKeys.has(key)) {
+      return false;
+    }
+
+    seenKeys.add(key);
+    return true;
+  });
+
+  if (dedupedNewProducts.length !== newProducts.length) {
+    console.warn(
+      `Duplicate products found in newProducts: skipped ${
+        newProducts.length - dedupedNewProducts.length
+      } duplicate(s) to avoid a unique constraint failure`
+    );
   }
 
   try {
@@ -62,16 +72,16 @@ export async function saveProducts(
       // --------------------------------------------------
       // Create New Products
       // --------------------------------------------------
-      if (newProducts.length > 0) {
+      if (dedupedNewProducts.length > 0) {
         await tx.product.createMany({
-          data: newProducts.map((product) => ({
+          data: dedupedNewProducts.map((product) => ({
             ...product,
             remark: product.remark ?? Prisma.JsonNull,
             scanRunId,
           })),
         });
 
-        console.log(`Created ${newProducts.length} new products`);
+        console.log(`Created ${dedupedNewProducts.length} new products`);
       }
 
       // --------------------------------------------------

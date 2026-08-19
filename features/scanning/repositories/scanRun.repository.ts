@@ -32,7 +32,14 @@ export async function markProcessing(scanRunId: number) {
   });
 }
 
-export interface ScanRunCounts {
+export interface PageStats {
+  pagesSucceeded: number;
+  pagesTimedOut: number;
+  pagesFailed: number;
+  pageResults: Prisma.InputJsonValue;
+}
+
+export interface ScanRunCounts extends PageStats {
   totalProducts: number;
   newProducts: number;
   updatedProducts: number;
@@ -50,13 +57,18 @@ export async function markSuccess(scanRunId: number, counts: ScanRunCounts) {
   });
 }
 
-export async function markFailed(scanRunId: number, errorMessage: string) {
+export async function markFailed(
+  scanRunId: number,
+  errorMessage: string,
+  pageStats?: PageStats,
+) {
   return prisma.scanRun.update({
     where: { id: scanRunId },
     data: {
       status: ScanStatus.FAILED,
       completedAt: new Date(),
       errorMessage,
+      ...pageStats,
     },
   });
 }

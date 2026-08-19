@@ -90,6 +90,17 @@ model ScanRun {
   newProducts         Int               @default(0)
   updatedProducts     Int               @default(0)
   removedProducts     Int               @default(0)
+  /// Count of this run's pageUrls that fetched successfully.
+  pagesSucceeded      Int               @default(0)
+  /// Count that hit a timeout (goto/waitForSelector for browser-rendered
+  /// pages, or the axios request timeout) — the site never responded in
+  /// time, as opposed to responding with an error.
+  pagesTimedOut       Int               @default(0)
+  /// Count that failed for any other reason (DNS failure, HTTP error
+  /// status, TLS error, ...).
+  pagesFailed         Int               @default(0)
+  /// Per-page breakdown: [{ url, status: "success"|"timeout"|"failed", error? }]
+  pageResults         Json?
   products            Product[]
   boardManufacturer   BoardManufacturer @relation(fields: [boardManufacturerId], references: [id])
 

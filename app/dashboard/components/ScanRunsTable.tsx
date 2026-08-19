@@ -156,7 +156,7 @@ export function ScanRunsTable({ triggerSource }: ScanRunsTableProps) {
                         <Button
                           size="xs"
                           variant="light"
-                          disabled={run.totalProducts === 0}
+                          disabled={run.newProducts === 0 && run.updatedProducts === 0 && run.removedProducts === 0}
                           onClick={() => viewProducts(run.id)}
                         >
                           View Products

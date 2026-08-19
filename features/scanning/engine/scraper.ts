@@ -2,17 +2,39 @@ import { loadHtml } from "../utils/html";
 import { extractProducts } from "./extractor";
 import { ScraperConfig, StructureConfig } from "../types/scraper";
 import type { ScrapedProduct } from "@/features/products/types/product";
+import { classifyPageError, type PageResult } from "../utils/pageResult";
 
 export type FetchHtml = (url: string) => Promise<string>;
+
+export interface ScrapeResult {
+  products: ScrapedProduct[];
+  pageResults: PageResult[];
+}
 
 async function scrapeStructure(
   pageUrl: string,
   structure: StructureConfig,
   semiSuppliers: string[],
   fetchHtml: FetchHtml,
+  pageResults: PageResult[],
 ): Promise<ScrapedProduct[]> {
   console.log("Scanning:", pageUrl);
-  const html = await fetchHtml(pageUrl);
+
+  let html: string;
+  try {
+    html = await fetchHtml(pageUrl);
+    pageResults.push({ url: pageUrl, status: "success" });
+  } catch (error) {
+    // A single bad page (timed out, 404, DNS failure, ...) no longer takes
+    // the whole scan down with it — record why it failed and move on to
+    // this manufacturer's remaining pageUrls.
+    pageResults.push({
+      url: pageUrl,
+      status: classifyPageError(error),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
 
   const $ = loadHtml(html);
 
@@ -42,6 +64,7 @@ async function scrapeStructure(
         structure.children,
         semiSuppliers,
         fetchHtml,
+        pageResults,
       );
 
       results.push(...childProducts);
@@ -56,8 +79,9 @@ export async function scrape(
   scraperConfig: ScraperConfig,
   semiSuppliers: string[],
   fetchHtml: FetchHtml,
-): Promise<ScrapedProduct[]> {
+): Promise<ScrapeResult> {
   const allProducts: ScrapedProduct[] = [];
+  const pageResults: PageResult[] = [];
 
   for (const pageUrl of pageUrls) {
 
@@ -68,11 +92,12 @@ export async function scrape(
         structure,
         semiSuppliers,
         fetchHtml,
+        pageResults,
       );
 
       allProducts.push(...products);
     }
   }
 
-  return allProducts;
+  return { products: allProducts, pageResults };
 }

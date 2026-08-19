@@ -33,21 +33,19 @@ export async function scrapeProducts(boardManufacturerId: number) {
   // flagged as client-rendered (a Vue/React SPA whose product markup
   // never appears in the raw HTTP response) pay for a headless browser.
   if (!bm?.requiresBrowserRendering) {
-    const products = await scrape(pageUrls, scraperConfig, semiSuppliers, request);
-    return products;
+    return scrape(pageUrls, scraperConfig, semiSuppliers, request);
   }
 
   const browserFetcher = await createBrowserFetcher(
     scraperConfig.structures.map((structure) => structure.productSelector),
   );
   try {
-    const products = await scrape(
+    return await scrape(
       pageUrls,
       scraperConfig,
       semiSuppliers,
       browserFetcher.fetchHtml,
     );
-    return products;
   } finally {
     await browserFetcher.close();
   }

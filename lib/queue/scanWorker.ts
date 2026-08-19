@@ -12,19 +12,30 @@ import {
   markTriggered,
 } from "@/features/schedule/repositories/scanSchedule.repository";
 import { triggerAllActive } from "@/features/scanning/services/triggerScan.service";
-import { TriggerSource } from "@/app/generated/prisma";
+import { Prisma, TriggerSource } from "@/app/generated/prisma";
 import { SCAN_QUEUE_NAME, type RunScanJobData } from "./scanQueue";
+import {
+  summarizePageResults,
+  type PageResult,
+} from "@/features/scanning/utils/pageResult";
 
 async function handleRunScan(job: Job<RunScanJobData>) {
   const { scanRunId, boardManufacturerId } = job.data;
 
   await markProcessing(scanRunId);
 
+  // Captured as soon as scraping finishes, so a later failure (e.g. the DB
+  // write in syncProducts) still reports which pages actually came back
+  // instead of losing that info to the catch block below.
+  let pageResults: PageResult[] = [];
+
   try {
-    const scrapedProducts = await scrapeProducts(boardManufacturerId);
+    const scraped = await scrapeProducts(boardManufacturerId);
+    pageResults = scraped.pageResults;
+
     const result = await syncProducts(
       boardManufacturerId,
-      scrapedProducts,
+      scraped.products,
       scanRunId,
     );
 
@@ -33,11 +44,17 @@ async function handleRunScan(job: Job<RunScanJobData>) {
       newProducts: result.summary.newRecords,
       updatedProducts: result.summary.updatedRecords,
       removedProducts: result.summary.expiredRecords,
+      ...summarizePageResults(pageResults),
+      pageResults: pageResults as unknown as Prisma.InputJsonValue,
     });
   } catch (error) {
     await markFailed(
       scanRunId,
       error instanceof Error ? error.message : String(error),
+      {
+        ...summarizePageResults(pageResults),
+        pageResults: pageResults as unknown as Prisma.InputJsonValue,
+      },
     );
     throw error;
   }
