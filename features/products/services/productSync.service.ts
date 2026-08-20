@@ -8,10 +8,25 @@ import {
 import { saveProducts } from "./saveProducts";
 import type { ScrapedProduct } from "../types/product";
 
+export interface SyncProductsOptions {
+  /**
+   * When true, the expiry step below is skipped entirely for this run.
+   * "Not found in scrapedProducts" is only meaningful evidence that a
+   * product is actually gone if the scrape itself succeeded — a run that
+   * scraped nothing, or hit page failures/timeouts, can't be trusted to
+   * prove absence. Set by the caller (scanWorker.ts) based on this run's
+   * page-fetch results.
+   */
+  skipExpiry?: boolean;
+  /** Human-readable reason, logged and returned in the summary when skipExpiry is true. */
+  skipExpiryReason?: string;
+}
+
 export async function syncProducts(
   bmId: number,
   scrapedProducts: ScrapedProduct[],
   scanRunId?: number,
+  options?: SyncProductsOptions,
 ) {
 
     const links = await prisma.boardManufacturerSemiSupplier.findMany({
@@ -180,27 +195,43 @@ for (const product of scrapedProducts) {
 }
 
 // Expired Products
-for (const [key, product] of dbMap) {
-  if (visited.has(key)) continue;
+//
+// Skipped when this run's results can't be trusted to prove a product is
+// actually gone (see SyncProductsOptions.skipExpiry) — a failed or
+// incomplete scan finding "nothing" says nothing about what's really on
+// the site. Marking real, still-live products EXPIRED just because a
+// page timed out would dump false positives into the review queue every
+// time a scan hiccups, and an EXPIRED product that gets mistakenly
+// Approved is actively BLOCKED — a worse outcome than just skipping.
+if (options?.skipExpiry) {
+  console.warn(
+    `Skipping expiry check for boardManufacturerId=${bmId}` +
+      (options.skipExpiryReason ? ` (${options.skipExpiryReason})` : "") +
+      " — this run's results can't be trusted to prove products are actually gone.",
+  );
+} else {
+  for (const [key, product] of dbMap) {
+    if (visited.has(key)) continue;
 
-  // A BLOCKED product going missing isn't a decision worth asking about
-  // either — it's already excluded from the active catalog whether the
-  // site still lists it or not, so "approving" its absence would just
-  // send it right back to BLOCKED (the state it's already in). Leave it
-  // untouched, same as an unchanged BLOCKED product that's still there.
-  if (product.status === ProductStatus.BLOCKED) continue;
+    // A BLOCKED product going missing isn't a decision worth asking about
+    // either — it's already excluded from the active catalog whether the
+    // site still lists it or not, so "approving" its absence would just
+    // send it right back to BLOCKED (the state it's already in). Leave it
+    // untouched, same as an unchanged BLOCKED product that's still there.
+    if (product.status === ProductStatus.BLOCKED) continue;
 
-  expiredProducts.push({
-    id: product.id,
-    name: product.name,
-    productUrl: product.productUrl,
-    description: product.description,
-    changeType: ChangeType.EXPIRED,
-    status: ProductStatus.PENDING,
-    previousStatus: product.status,
-    previousChangeType: product.changeType,
-    previousScanRunId: product.scanRunId,
-  });
+    expiredProducts.push({
+      id: product.id,
+      name: product.name,
+      productUrl: product.productUrl,
+      description: product.description,
+      changeType: ChangeType.EXPIRED,
+      status: ProductStatus.PENDING,
+      previousStatus: product.status,
+      previousChangeType: product.changeType,
+      previousScanRunId: product.scanRunId,
+    });
+  }
 }
 
 await saveProducts(newProducts, updatedProducts, expiredProducts, scanRunId);
@@ -214,6 +245,9 @@ return {
     updatedRecords: updatedProducts.length,
     expiredRecords: expiredProducts.length,
     unchangedRecords: unchangedCount,
+
+    expirySkipped: options?.skipExpiry ?? false,
+    expirySkippedReason: options?.skipExpiry ? options.skipExpiryReason : undefined,
   },
 
   newProducts,

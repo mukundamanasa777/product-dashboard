@@ -15,6 +15,10 @@ export async function createPending(
   });
 }
 
+export async function findById(scanRunId: number) {
+  return prisma.scanRun.findUnique({ where: { id: scanRunId } });
+}
+
 export async function attachJobId(scanRunId: number, jobId: string) {
   return prisma.scanRun.update({
     where: { id: scanRunId },

@@ -24,7 +24,10 @@ export async function createBrowserFetcher(waitForSelectors: string[]) {
   async function fetchHtml(url: string): Promise<string> {
     const page = await browser.newPage();
     try {
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      const response = await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: 30_000,
+      });
 
       if (waitSelector) {
         // Swallow the timeout rather than throw: if the selector never
@@ -34,7 +37,36 @@ export async function createBrowserFetcher(waitForSelectors: string[]) {
         await page.waitForSelector(waitSelector, { timeout: 15_000 }).catch(() => {});
       }
 
-      return await page.content();
+      const html = await page.content();
+
+      // A non-2xx response, or a bot-protection "please verify you're
+      // human" challenge page (Cloudflare et al. — some challenge modes
+      // return 200, not just 429/403), still resolves normally here:
+      // Playwright only throws on navigation failures, never on HTTP
+      // status or page content. Left unchecked, this is indistinguishable
+      // from a genuinely empty listing page — which is exactly what
+      // caused real, live Advantech products to get wrongly marked
+      // EXPIRED run after run (confirmed: multiple runs recorded this
+      // exact page as "success" in pageResults while it was silently
+      // returning a Cloudflare challenge instead of the real listing).
+      // Throwing here routes it through scraper.ts's existing per-page
+      // catch — classified as a "failed" page, which correctly makes
+      // syncProducts skip the expiry step for this run instead of trusting
+      // a scrape that never actually saw this page's real content.
+      const status = response?.status();
+      const looksBlocked =
+        (status !== undefined && (status < 200 || status >= 300)) ||
+        /just a moment|checking your browser|attention required|cf-browser-verification/i.test(
+          html,
+        );
+
+      if (looksBlocked) {
+        throw new Error(
+          `Blocked or errored fetching ${url} (HTTP ${status ?? "unknown"})`,
+        );
+      }
+
+      return html;
     } finally {
       await page.close();
     }

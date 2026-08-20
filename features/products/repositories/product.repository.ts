@@ -11,6 +11,34 @@ interface ProductRemark {
   previousScanRunId?: number | null;
 }
 
+/**
+ * Live counts of products currently pointing at each of the given scan
+ * runs — i.e. exactly what /dashboard/products?scan_id=<id> would show
+ * right now. Deliberately NOT derived from ScanRun.newProducts/
+ * updatedProducts/removedProducts: those are a snapshot from when that
+ * run finished, and go stale the moment a *later* run touches the same
+ * product rows and moves their scanRunId forward — this counts the
+ * Product table directly, so it's always accurate no matter how much
+ * time (or how many later runs) have passed since.
+ */
+export async function countByScanRunIds(
+  scanRunIds: number[],
+): Promise<Map<number, number>> {
+  if (scanRunIds.length === 0) return new Map();
+
+  const grouped = await prisma.product.groupBy({
+    by: ["scanRunId"],
+    where: { scanRunId: { in: scanRunIds } },
+    _count: { _all: true },
+  });
+
+  return new Map(
+    grouped
+      .filter((g) => g.scanRunId !== null)
+      .map((g) => [g.scanRunId as number, g._count._all]),
+  );
+}
+
 export interface ProductFilters {
   search?: string;
   semiSupplierIds?: number[];

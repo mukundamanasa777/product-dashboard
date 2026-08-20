@@ -115,7 +115,9 @@ export function ScanRunsTable({ triggerSource }: ScanRunsTableProps) {
               <Table.Tr>
                 <Table.Th>Board Manufacturer</Table.Th>
                 <Table.Th>Status</Table.Th>
-                <Table.Th>Started At</Table.Th>
+                <Table.Th>Pages</Table.Th>
+                {/* <Table.Th>Started At</Table.Th> */}
+                <Table.Th>Processing Started At</Table.Th>
                 <Table.Th>Completed At</Table.Th>
                 <Table.Th>Action</Table.Th>
               </Table.Tr>
@@ -137,15 +139,69 @@ export function ScanRunsTable({ triggerSource }: ScanRunsTableProps) {
                     </Tooltip>
                   </Table.Td>
                   <Table.Td>
+                    {run.pagesFailed === 0 && run.pagesTimedOut === 0 ? (
+                      <Text size="sm" c="dimmed">
+                        {run.pagesSucceeded > 0 ? `${run.pagesSucceeded} ok` : "—"}
+                      </Text>
+                    ) : (
+                      <Tooltip
+                        multiline
+                        w={420}
+                        label={
+                          <Stack gap={6}>
+                            {run.pagesFailed > 0 && (
+                              <div>
+                                <Text size="xs" fw={700}>
+                                  Failed ({run.pagesFailed})
+                                </Text>
+                                {run.failedUrls.map((p) => (
+                                  <Text size="xs" key={p.url}>
+                                    {p.url}
+                                    {p.error ? ` — ${p.error}` : ""}
+                                  </Text>
+                                ))}
+                              </div>
+                            )}
+                            {run.pagesTimedOut > 0 && (
+                              <div>
+                                <Text size="xs" fw={700}>
+                                  Timed out ({run.pagesTimedOut})
+                                </Text>
+                                {run.timedOutUrls.map((p) => (
+                                  <Text size="xs" key={p.url}>
+                                    {p.url}
+                                    {p.error ? ` — ${p.error}` : ""}
+                                  </Text>
+                                ))}
+                              </div>
+                            )}
+                          </Stack>
+                        }
+                      >
+                        <Badge color="orange" variant="light" style={{ cursor: "help" }}>
+                          {[
+                            run.pagesFailed > 0 ? `${run.pagesFailed} failed` : null,
+                            run.pagesTimedOut > 0 ? `${run.pagesTimedOut} timed out` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Table.Td>
+                  {/* <Table.Td>
                     <Text size="sm">{formatDateTime(run.startedAt)}</Text>
+                  </Table.Td> */}
+                  <Table.Td>
+                    <Text size="sm">{formatDateTime(run.processingStartedAt)}</Text>
                   </Table.Td>
                   <Table.Td>
                     <Text size="sm">{formatDateTime(run.completedAt)}</Text>
                   </Table.Td>
                   <Table.Td>
                     <Tooltip
-                      label="This run has no products yet"
-                      disabled={run.totalProducts > 0}
+                      label="This run has no products to show — nothing was created, updated, or expired"
+                      disabled={run.reflectedProducts > 0}
                     >
                       {/* Wrapper span, not the Button itself, is what the
                           Tooltip listens on — a disabled button suppresses
@@ -156,7 +212,14 @@ export function ScanRunsTable({ triggerSource }: ScanRunsTableProps) {
                         <Button
                           size="xs"
                           variant="light"
-                          disabled={run.newProducts === 0 && run.updatedProducts === 0 && run.removedProducts === 0}
+                          // reflectedProducts (new + updated + removed), not
+                          // totalProducts — saveProducts.ts never stamps
+                          // scanRunId on unchanged products, so the "View
+                          // Products" link (which filters by scan_id) would
+                          // show nothing for those even though totalProducts
+                          // is nonzero. This is the actual count that link
+                          // will display, for both manual and scheduled runs.
+                          disabled={run.reflectedProducts === 0}
                           onClick={() => viewProducts(run.id)}
                         >
                           View Products

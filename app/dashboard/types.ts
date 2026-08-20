@@ -81,12 +81,23 @@ export interface ScanRunDTO {
   status: ScanStatus;
   triggerSource: TriggerSource;
   startedAt: string;
+  processingStartedAt: string;
   completedAt: string | null;
   errorMessage: string | null;
+  /** Everything the scrape found this run (new + updated + unchanged) — not what scan_id filtering shows. See reflectedProducts. */
   totalProducts: number;
   newProducts: number;
   updatedProducts: number;
   removedProducts: number;
+  /** Live count of Product rows currently pointing at this run's id — exactly what /dashboard/products?scan_id=<id> shows right now. Not derived from newProducts/updatedProducts/removedProducts, which go stale once a later run reassigns the same rows. */
+  reflectedProducts: number;
+  pagesSucceeded: number;
+  /** Site never responded in time (goto/waitForSelector timeout, or the axios request timeout) — distinct from failedUrls below. */
+  pagesTimedOut: number;
+  /** Failed for any other reason (DNS failure, HTTP error status, TLS error, network change, ...). */
+  pagesFailed: number;
+  failedUrls: { url: string; error: string | null }[];
+  timedOutUrls: { url: string; error: string | null }[];
 }
 
 export interface ScanRunsResponse {
