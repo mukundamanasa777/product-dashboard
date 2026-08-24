@@ -22,6 +22,14 @@ model BoardManufacturer {
   /// this manufacturer only. Defaults to false, so existing manufacturers
   /// (plain server-rendered HTML) are unaffected.
   requiresBrowserRendering       Boolean                         @default(false)
+  /// Set when this manufacturer's site rate-limits/blocks (Cloudflare 429s,
+  /// etc.) if pages are fetched back-to-back — browserRequest.ts's fetcher
+  /// then spaces requests ~2 minutes apart (humanized, jittered) instead of
+  /// firing them as fast as the browser can respond. Defaults to false so
+  /// manufacturers that don't need it keep scanning at full speed; flip
+  /// this on a per-manufacturer basis only once a scan actually shows
+  /// pages failing with 429/challenge-page errors.
+  requiresThrottledFetch         Boolean                         @default(false)
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
   boardManufacturerSemiSuppliers BoardManufacturerSemiSupplier[]

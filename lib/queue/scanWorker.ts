@@ -22,11 +22,14 @@ import {
 
 // How long a PROCESSING run is trusted to still genuinely be running before
 // a second dispatch for the same scanRunId is allowed to actually redo the
-// work. Comfortably above the slowest real run recorded so far (Advantech,
-// ~16 min; ADLINK, ~33 min) — high enough that a live run is never mistaken
-// for dead, but low enough that a truly crashed worker's job isn't stuck
+// work. Used to be comfortably above the slowest real run recorded (Advantech,
+// ~16 min; ADLINK, ~33 min) at 1 hour, but requiresThrottledFetch manufacturers
+// now space every page fetch ~2 minutes apart (browserRequest.ts) to avoid
+// Cloudflare 429s — Advantech alone has 72 pageUrls, so a throttled run can
+// legitimately take ~2.5+ hours. Raised to 4 hours so that doesn't get
+// mistaken for a crash, while a truly dead worker's job still isn't stuck
 // PROCESSING forever.
-const STALE_PROCESSING_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+const STALE_PROCESSING_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 async function handleRunScan(job: Job<RunScanJobData>) {
   const { scanRunId, boardManufacturerId } = job.data;
@@ -141,13 +144,15 @@ export const scanWorker = new Worker(
     connection,
     concurrency: 2,
     // Default is 30s — far too short for a browser-rendered scan that can
-    // legitimately run 15+ minutes (Advantech: ~16 min, ADLINK: ~33 min).
-    // A lock that short means any brief Redis hiccup during a long scan
-    // can make BullMQ think the worker died and redeliver the job while
-    // the original is still very much alive — exactly what happened to
-    // Advantech runs 1 and 158. This is the actual root-cause fix; the
-    // STALE_PROCESSING_THRESHOLD_MS guard above is the backstop in case a
-    // duplicate dispatch happens anyway (a real crash, a manual re-trigger).
-    lockDuration: 60 * 60 * 1000, // 1 hour
+    // legitimately run 15+ minutes (Advantech: ~16 min, ADLINK: ~33 min),
+    // and now up to ~2.5+ hours for a requiresThrottledFetch manufacturer
+    // paced at ~2 min/page. A lock that short means any brief Redis hiccup
+    // during a long scan can make BullMQ think the worker died and
+    // redeliver the job while the original is still very much alive —
+    // exactly what happened to Advantech runs 1 and 158. This is the
+    // actual root-cause fix; the STALE_PROCESSING_THRESHOLD_MS guard above
+    // is the backstop in case a duplicate dispatch happens anyway (a real
+    // crash, a manual re-trigger). Matches STALE_PROCESSING_THRESHOLD_MS.
+    lockDuration: 4 * 60 * 60 * 1000, // 4 hours
   },
 );

@@ -1,5 +1,22 @@
 import { chromium, type Browser } from "playwright";
 
+// Cloudflare (and similar bot-protection) rate-limits by cadence, not just
+// volume — firing every category page back-to-back reads as a bot and gets
+// 429'd (confirmed: Advantech run 17 failed 44/72 pages this way, all "HTTP
+// 429"). Spacing requests out roughly the way a human clicking through
+// category pages would, instead of as fast as the browser can respond, is
+// what actually gets the real listing through instead of a block page.
+const MIN_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes between requests
+const JITTER_MS = 20 * 1000; // +/- up to 20s so the cadence isn't robotically exact
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function humanizedIntervalMs(): number {
+  return MIN_INTERVAL_MS + (Math.random() * 2 - 1) * JITTER_MS;
+}
+
 /**
  * For sites whose product listing is rendered client-side (e.g. a Vue/React
  * SPA), a plain HTTP fetch (request.ts) never sees real product markup —
@@ -16,12 +33,36 @@ import { chromium, type Browser } from "playwright";
  * network idle. Marketing sites commonly have persistent background traffic
  * (chat widgets, analytics beacons) that never goes idle, so "networkidle"
  * reliably times out even once the real content has long since rendered.
+ *
+ * `throttle` mirrors the manufacturer's `requiresThrottledFetch` DB column
+ * (default false — most manufacturers scan at full speed). Only turn it on
+ * for a manufacturer once a real scan has shown pages failing with 429s or
+ * a bot-challenge page; it triples-plus the wall-clock time of a scan with
+ * many pageUrls, so it isn't worth paying for sites that aren't blocking.
  */
-export async function createBrowserFetcher(waitForSelectors: string[]) {
+export async function createBrowserFetcher(
+  waitForSelectors: string[],
+  throttle: boolean = false,
+) {
   const browser: Browser = await chromium.launch();
   const waitSelector = waitForSelectors.filter(Boolean).join(", ");
 
+  // Tracked per browser instance (i.e. per scrapeProducts() call) so pacing
+  // applies across this manufacturer's whole run, not per-call from zero.
+  let lastRequestAt: number | null = null;
+
   async function fetchHtml(url: string): Promise<string> {
+    if (throttle && lastRequestAt !== null) {
+      const elapsed = Date.now() - lastRequestAt;
+      const wait = humanizedIntervalMs() - elapsed;
+      if (wait > 0) {
+        await sleep(wait);
+      }
+    }
+    if (throttle) {
+      lastRequestAt = Date.now();
+    }
+
     const page = await browser.newPage();
     try {
       const response = await page.goto(url, {

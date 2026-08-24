@@ -38,6 +38,7 @@ export async function scrapeProducts(boardManufacturerId: number) {
 
   const browserFetcher = await createBrowserFetcher(
     scraperConfig.structures.map((structure) => structure.productSelector),
+    bm?.requiresThrottledFetch ?? false,
   );
   try {
     return await scrape(
