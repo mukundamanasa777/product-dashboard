@@ -17,6 +17,7 @@ import {
   IconClock,
   IconCube,
   IconFileUpload,
+  IconLink,
   IconPackage,
   IconTools,
 } from "@tabler/icons-react";
@@ -60,6 +61,12 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Scheduled Triggering",
         href: "/dashboard/scheduled",
         icon: <IconClock size={18} />,
+      },
+      {
+        value: "link-check",
+        label: "Link Check",
+        href: "/dashboard/link-check",
+        icon: <IconLink size={18} />,
       },
       {
         value: "file-upload",

@@ -215,3 +215,51 @@ model ScanSchedule {
 
   @@map("scan_schedules")
 }
+
+enum LinkCheckStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+/// One row per "Check All Links" run — same purpose as ScanRun, but for the
+/// product link-check job instead of a manufacturer scrape. Kept as its own
+/// model rather than folded into ScanRun since it isn't scoped to a
+/// BoardManufacturer at all (it checks every checkable product in one go).
+model LinkCheckRun {
+  id                  Int             @id @default(autoincrement())
+  status              LinkCheckStatus @default(PENDING)
+  triggerSource       TriggerSource   @default(MANUAL)
+  startedAt           DateTime        @default(now())
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  errorMessage        String?
+  checked             Int             @default(0)
+  okCount             Int             @default(0)
+  brokenCount         Int             @default(0)
+
+  @@index([startedAt])
+  @@map("link_check_runs")
+}
+
+/// Same shape as ScanSchedule, kept as a separate row/model rather than a
+/// second column on ScanSchedule so the two automations can be toggled and
+/// timed independently of each other.
+model LinkCheckSchedule {
+  id          Int               @id @default(autoincrement())
+  frequency   ScheduleFrequency @default(WEEKLY)
+  dayOfWeek   Int               @default(1)
+  dayOfMonth  Int               @default(1)
+  hour        Int               @default(4)
+  minute      Int               @default(0)
+  timezone    String            @default("UTC")
+  isActive    Boolean           @default(true)
+  cronPattern String
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("link_check_schedules")
+}

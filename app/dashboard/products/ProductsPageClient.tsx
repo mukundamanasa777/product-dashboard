@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  Alert,
   Box,
   Button,
   Card,
@@ -18,12 +17,10 @@ import { ChangeTypeFilter } from "../components/ChangeTypeFilter";
 import { FilterBreadcrumbs } from "../components/FilterBreadcrumbs";
 import { ProductsSummary } from "../components/ProductsSummary";
 import { ProductsList } from "../components/ProductsList";
-import { ConfirmDialog } from "../components/ConfirmDialog";
-import { useCheckProductLinksMutation, useGetProductsQuery } from "@/lib/redux/api";
+import { useGetProductsQuery } from "@/lib/redux/api";
 import type {
   BoardManufacturerOption,
   ChangeType,
-  LinkCheckSummary,
   ProductStatus,
   SemiSupplierOption,
 } from "../types";
@@ -105,30 +102,6 @@ export default function ProductsPageClient() {
   // written by any onChange, only ever re-derived by a full page load.
   const [scanId] =
  useState(() => parseScanId(searchParams.get("scan_id")));
-
-  const [checkLinksConfirmOpen, setCheckLinksConfirmOpen] = useState(false);
-  const [checkProductLinks, { isLoading: checkingLinks }] =
-    useCheckProductLinksMutation();
-  const [linkCheckResult, setLinkCheckResult] = useState<
-    { summary: LinkCheckSummary } | { error: string } | null
-  >(null);
-
-  async function handleCheckAllLinks() {
-    console.log("Checking all product links...1");
-    setCheckLinksConfirmOpen(false);
-    setLinkCheckResult(null);
-        console.log("Checking all product links...2");
-
-    try {
-          console.log("Checking all product links...3");
-      const summary = await checkProductLinks().unwrap();
-      setLinkCheckResult({ summary });
-    } catch {
-      setLinkCheckResult({
-        error: "Could not check product links. Please try again.",
-      });
-    }
-  }
 
   useEffect(() => {
     const timeout = setTimeout(
@@ -271,13 +244,6 @@ export default function ProductsPageClient() {
               style={{ flex: 1, minWidth: 240 }}
             />
             <Group gap="xs" wrap="wrap">
-              <Button
-                variant="light"
-                loading={checkingLinks}
-                onClick={() => setCheckLinksConfirmOpen(true)}
-              >
-                Check All Links
-              </Button>
               <Button component="a" href={exportHref} variant="default">
                 Export to Excel
               </Button>
@@ -311,36 +277,8 @@ export default function ProductsPageClient() {
             </Box>
 
           </Group>
-
-          {linkCheckResult &&
-            ("error" in linkCheckResult ? (
-              <Alert color="red" title="Link check failed">
-                {linkCheckResult.error}
-              </Alert>
-            ) : (
-              <Alert color={linkCheckResult.summary.brokenCount > 0 ? "orange" : "green"} title="Link check complete">
-                Checked {linkCheckResult.summary.checked} product
-                {linkCheckResult.summary.checked === 1 ? "" : "s"}:{" "}
-                {linkCheckResult.summary.okCount} working,{" "}
-                {linkCheckResult.summary.brokenCount} not working
-                {linkCheckResult.summary.brokenCount > 0
-                  ? " — flagged as Not Found and moved to Pending for review"
-                  : ""}
-                .
-              </Alert>
-            ))}
         </Stack>
       </Card>
-
-      <ConfirmDialog
-        opened={checkLinksConfirmOpen}
-        title="Check all product links?"
-        message="This fetches every active product's URL and flags any that aren't working as Not Found, moving them to Pending for review. This can take a while for a large catalog."
-        confirmLabel="Check Links"
-        loading={checkingLinks}
-        onCancel={() => setCheckLinksConfirmOpen(false)}
-        onConfirm={handleCheckAllLinks}
-      />
 
       <FilterBreadcrumbs
         searchTerm={debouncedSearch}

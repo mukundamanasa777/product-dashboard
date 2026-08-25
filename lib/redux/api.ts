@@ -3,7 +3,8 @@ import type {
   BoardManufacturerOption,
   ChangeType,
   FileUploadsResponse,
-  LinkCheckSummary,
+  LinkCheckRunsResponse,
+  LinkCheckScheduleDTO,
   ProductDTO,
   ProductsResponse,
   ProductStatus,
@@ -39,6 +40,14 @@ export interface ScanRunsQueryArgs {
   pageSize: number;
 }
 
+// Unlike ScanRunsQueryArgs, this has no triggerSource — link checks get one
+// dedicated page showing every run together (manual + scheduled), not a
+// split Instant/Scheduled view like scanning has.
+export interface LinkCheckRunsQueryArgs {
+  page: number;
+  pageSize: number;
+}
+
 export interface FileUploadsQueryArgs {
   page: number;
   pageSize: number;
@@ -57,6 +66,11 @@ export interface UpdateScheduleArgs {
 export interface TriggerScanResult {
   scanRunIds: number[];
   count: number;
+}
+
+export interface TriggerLinkCheckResult {
+  linkCheckRunId: number;
+  status: string;
 }
 
 export interface UploadFileResult {
@@ -81,6 +95,8 @@ export const api = createApi({
     "FileUpload",
     "BoardManufacturer",
     "ChangeType",
+    "LinkCheckRun",
+    "LinkCheckSchedule",
   ],
   endpoints: (builder) => ({
     getProducts: builder.query<ProductsResponse, ProductsQueryArgs>({
@@ -119,16 +135,16 @@ export const api = createApi({
       invalidatesTags: [{ type: "Product", id: "LIST" }],
     }),
 
-    // Actively fetches every checkable product's own URL and flags dead
-    // ones as NOT_FOUND (see linkCheck.service) — invalidates both the
-    // product list (statuses/changeTypes just changed) and the change-type
-    // filter options (NOT_FOUND may now exist for the first time).
-    checkProductLinks: builder.mutation<LinkCheckSummary, void>({
+    // Enqueues a background run that fetches every checkable product's own
+    // URL and flags dead ones as NOT_FOUND (see linkCheck.service) — returns
+    // immediately with a run id rather than the outcome; see
+    // getLinkCheckRuns for progress/results. Only the run-history tags are
+    // invalidated here, same as triggerScan below — the Product/ChangeType
+    // tags aren't touched until there's actually new data to show, which
+    // isn't yet.
+    checkProductLinks: builder.mutation<TriggerLinkCheckResult, void>({
       query: () => ({ url: "products/check-links", method: "POST" }),
-      invalidatesTags: [
-        { type: "Product", id: "LIST" },
-        { type: "ChangeType", id: "LIST" },
-      ],
+      invalidatesTags: [{ type: "LinkCheckRun", id: "LIST" }],
     }),
 
     getBoardManufacturers: builder.query<
@@ -176,6 +192,27 @@ export const api = createApi({
       invalidatesTags: ["Schedule"],
     }),
 
+    getLinkCheckRuns: builder.query<
+      LinkCheckRunsResponse,
+      LinkCheckRunsQueryArgs
+    >({
+      query: (params) => ({ url: "link-check-runs", params }),
+      providesTags: [{ type: "LinkCheckRun", id: "LIST" }],
+    }),
+
+    getLinkCheckSchedule: builder.query<LinkCheckScheduleDTO, void>({
+      query: () => "link-check-schedule",
+      providesTags: ["LinkCheckSchedule"],
+    }),
+
+    updateLinkCheckSchedule: builder.mutation<
+      LinkCheckScheduleDTO,
+      UpdateScheduleArgs
+    >({
+      query: (body) => ({ url: "link-check-schedule", method: "PUT", body }),
+      invalidatesTags: ["LinkCheckSchedule"],
+    }),
+
     getFileUploads: builder.query<FileUploadsResponse, FileUploadsQueryArgs>({
       query: (params) => ({ url: "file-uploads", params }),
       providesTags: [{ type: "FileUpload", id: "LIST" }],
@@ -204,6 +241,9 @@ export const {
   useTriggerScanMutation,
   useGetScheduleQuery,
   useUpdateScheduleMutation,
+  useGetLinkCheckRunsQuery,
+  useGetLinkCheckScheduleQuery,
+  useUpdateLinkCheckScheduleMutation,
   useGetFileUploadsQuery,
   useUploadFileMutation,
 } = api;

@@ -66,6 +66,28 @@ export interface LinkCheckSummary {
   brokenCount: number;
 }
 
+export type LinkCheckStatus = "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED";
+
+export interface LinkCheckRunDTO {
+  id: number;
+  status: LinkCheckStatus;
+  triggerSource: TriggerSource;
+  startedAt: string;
+  processingStartedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  checked: number;
+  okCount: number;
+  brokenCount: number;
+}
+
+export interface LinkCheckRunsResponse {
+  items: LinkCheckRunDTO[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export type ScanStatus =
   | "PENDING"
   | "PROCESSING"
@@ -144,3 +166,6 @@ export interface ScanScheduleDTO {
   lastRunAt: string | null;
   nextRunAt: string | null;
 }
+
+/** Same shape as ScanScheduleDTO — the link-check schedule is a separate row. */
+export type LinkCheckScheduleDTO = ScanScheduleDTO;

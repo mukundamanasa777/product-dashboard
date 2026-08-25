@@ -4,12 +4,16 @@
 import "dotenv/config";
 import { scanWorker } from "@/lib/queue/scanWorker";
 import { fileUploadWorker } from "@/lib/queue/fileUploadWorker";
+import { linkCheckWorker } from "@/lib/queue/linkCheckWorker";
 import { registerScanSchedule } from "@/lib/queue/scheduler";
+import { registerLinkCheckSchedule } from "@/lib/queue/linkCheckScheduler";
 
 async function main() {
   await registerScanSchedule();
+  await registerLinkCheckSchedule();
   console.log("Scan worker started, listening for jobs...");
   console.log("File upload worker started, listening for jobs...");
+  console.log("Link check worker started, listening for jobs...");
 }
 
 main().catch((error) => {
@@ -20,11 +24,13 @@ main().catch((error) => {
 process.on("SIGTERM", async () => {
   await scanWorker.close();
   await fileUploadWorker.close();
+  await linkCheckWorker.close();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
   await scanWorker.close();
   await fileUploadWorker.close();
+  await linkCheckWorker.close();
   process.exit(0);
 });

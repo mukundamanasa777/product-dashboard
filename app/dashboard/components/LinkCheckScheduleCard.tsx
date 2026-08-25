@@ -16,7 +16,10 @@ import {
 import { formatDateTime } from "../utils/humanize";
 import type { ScheduleFrequency } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { useGetScheduleQuery, useUpdateScheduleMutation } from "@/lib/redux/api";
+import {
+  useGetLinkCheckScheduleQuery,
+  useUpdateLinkCheckScheduleMutation,
+} from "@/lib/redux/api";
 
 const FREQUENCY_OPTIONS: { value: ScheduleFrequency; label: string }[] = [
   { value: "DAILY", label: "Daily" },
@@ -39,15 +42,14 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
   label: `${String(hour).padStart(2, "0")}:00`,
 }));
 
-const MINUTE_OPTIONS = ["0", "5", "17", "30", "45", "50"].map((minute) => ({
+const MINUTE_OPTIONS = ["0", "5", "15", "30", "45", "50"].map((minute) => ({
   value: minute,
   label: minute.padStart(2, "0"),
 }));
 
-// The viewer's IANA timezone (e.g. "Asia/Kolkata"). This never changes for
-// the lifetime of the page, so `subscribe` is a no-op — but the value still
-// needs `useSyncExternalStore`'s server/client split: the server snapshot
-// would otherwise report the *server's* zone (wrong), not the browser's.
+// Same reasoning as ScheduleSettingsCard's identical helpers: the server
+// snapshot must report a fixed zone (not the server's own), so the viewer's
+// real IANA zone doesn't flash-then-correct after hydration.
 function subscribeToTimezone() {
   return () => {};
 }
@@ -58,9 +60,15 @@ function getServerTimezoneSnapshot() {
   return "UTC";
 }
 
-export function ScheduleSettingsCard() {
-  const { data: schedule, isLoading: loading } = useGetScheduleQuery();
-  const [updateSchedule, { isLoading: saving }] = useUpdateScheduleMutation();
+/**
+ * Schedule settings for the "Check All Links" job — same form/behavior as
+ * ScheduleSettingsCard, pointed at the separate LinkCheckSchedule row so
+ * the two automations can run on independent cadences.
+ */
+export function LinkCheckScheduleCard() {
+  const { data: schedule, isLoading: loading } = useGetLinkCheckScheduleQuery();
+  const [updateSchedule, { isLoading: saving }] =
+    useUpdateLinkCheckScheduleMutation();
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -72,16 +80,12 @@ export function ScheduleSettingsCard() {
   const [isActive, setIsActive] = useState(true);
   const formSeededFor = useRef<number | null>(null);
 
-  // The viewer's real IANA timezone (e.g. "Asia/Kolkata"), not a fixed one.
   const timezone = useSyncExternalStore(
     subscribeToTimezone,
     getTimezoneSnapshot,
     getServerTimezoneSnapshot,
   );
 
-  // Seed the form fields once the schedule loads (or reloads after a save
-  // elsewhere invalidates it) — keyed by id so this doesn't refight the
-  // user's in-progress edits on every background refetch.
   useEffect(() => {
     if (!schedule || formSeededFor.current === schedule.id) return;
     formSeededFor.current = schedule.id;
@@ -93,14 +97,6 @@ export function ScheduleSettingsCard() {
     setIsActive(schedule.isActive);
   }, [schedule]);
 
-  // Once we know both the saved schedule and the viewer's real timezone,
-  // silently re-save if they don't match — e.g. the schedule was created
-  // with a server-side default zone before anyone had picked a real one.
-  // This keeps "4am" meaning 4am for the person looking at the screen
-  // instead of a fixed zone no one asked for. Reads straight from
-  // `schedule` (not the form state above) so it can't race the form-seed
-  // effect — it only ever needs to correct the timezone field, so it
-  // carries every other field through unchanged from the source of truth.
   const selfHealedRef = useRef(false);
   useEffect(() => {
     if (!schedule || schedule.timezone === timezone) return;
@@ -142,11 +138,10 @@ export function ScheduleSettingsCard() {
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <div>
-            <Title order={5}>Schedule Settings</Title>
+            <Title order={5}>Link Check Schedule</Title>
             <Text size="sm" c="dimmed">
-              Choose how often scans run automatically for all active board
-              manufacturers. Times below are in your local timezone (
-              {timezone}).
+              Choose how often every product&apos;s link is checked automatically.
+              Times below are in your local timezone ({timezone}).
             </Text>
           </div>
           <Switch
@@ -248,7 +243,7 @@ export function ScheduleSettingsCard() {
       <ConfirmDialog
         opened={confirmOpen}
         title="Save this schedule?"
-        message="Future automatic scans will run on this new schedule instead of the current one. You can update it at any time."
+        message="Future automatic link checks will run on this new schedule instead of the current one. You can update it at any time."
         confirmLabel="Save Schedule"
         loading={saving}
         onCancel={() => setConfirmOpen(false)}
