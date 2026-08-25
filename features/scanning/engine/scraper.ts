@@ -38,7 +38,14 @@ async function scrapeStructure(
 
   const $ = loadHtml(html);
 
-  // console.log("HTML Code:", $.html().slice(0, 500)); // Log the first 500 characters of the HTML code
+  // TEMP DEBUG — remove once the Railway-vs-local product mismatch for
+  // Tria Technologies is root-caused. Logs which structure/URL this fetch
+  // was for and a snippet of what actually came back, so a Cloudflare/
+  // anti-bot challenge page (vs. real markup) is visible in Railway logs.
+  console.log(
+    `[scrape-debug] structure="${structure.name}" url=${pageUrl} htmlLength=${html.length}`,
+  );
+  console.log("[scrape-debug] HTML snippet:", $.html().slice(0, 800));
 
   const products = extractProducts(
     $,
