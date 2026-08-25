@@ -1,3 +1,4 @@
+import type { CheerioAPI } from "cheerio";
 import { loadHtml } from "../utils/html";
 import { extractProducts } from "./extractor";
 import { ScraperConfig, StructureConfig } from "../types/scraper";
@@ -11,13 +12,16 @@ export interface ScrapeResult {
   pageResults: PageResult[];
 }
 
-async function scrapeStructure(
+/**
+ * Fetches one URL and records the outcome in pageResults. Returns null (and
+ * records why) on failure instead of throwing, so one bad page doesn't take
+ * the whole scan down with it.
+ */
+async function fetchPage(
   pageUrl: string,
-  structure: StructureConfig,
-  semiSuppliers: string[],
   fetchHtml: FetchHtml,
   pageResults: PageResult[],
-): Promise<ScrapedProduct[]> {
+): Promise<CheerioAPI | null> {
   console.log("Scanning:", pageUrl);
 
   let html: string;
@@ -25,28 +29,42 @@ async function scrapeStructure(
     html = await fetchHtml(pageUrl);
     pageResults.push({ url: pageUrl, status: "success" });
   } catch (error) {
-    // A single bad page (timed out, 404, DNS failure, ...) no longer takes
-    // the whole scan down with it — record why it failed and move on to
-    // this manufacturer's remaining pageUrls.
     pageResults.push({
       url: pageUrl,
       status: classifyPageError(error),
       error: error instanceof Error ? error.message : String(error),
     });
-    return [];
+    return null;
   }
 
   const $ = loadHtml(html);
 
   // TEMP DEBUG — remove once the Railway-vs-local product mismatch for
-  // Tria Technologies is root-caused. Logs which structure/URL this fetch
-  // was for and a snippet of what actually came back, so a Cloudflare/
-  // anti-bot challenge page (vs. real markup) is visible in Railway logs.
+  // Tria Technologies is root-caused. Logs a snippet of what actually came
+  // back, so a Cloudflare/anti-bot challenge page (vs. real markup) is
+  // visible in Railway logs.
   console.log(
-    `[scrape-debug] structure="${structure.name}" url=${pageUrl} htmlLength=${html.length}`,
+    `[scrape-debug] url=${pageUrl} htmlLength=${html.length}`,
   );
   console.log("[scrape-debug] HTML snippet:", $.html().slice(0, 800));
 
+  return $;
+}
+
+/**
+ * Parses one already-fetched page against one structure. If a matched
+ * product needs drilling into its own page (a child structure declared,
+ * no semiSupplier match on this page), that's a genuinely different URL —
+ * it gets its own fetch, no redundancy to remove there.
+ */
+async function parseStructure(
+  $: CheerioAPI,
+  pageUrl: string,
+  structure: StructureConfig,
+  semiSuppliers: string[],
+  fetchHtml: FetchHtml,
+  pageResults: PageResult[],
+): Promise<ScrapedProduct[]> {
   const products = extractProducts(
     $,
     [structure], // extractor expects an array
@@ -66,15 +84,19 @@ async function scrapeStructure(
     }
 
     if (structure.children) {
-      const childProducts = await scrapeStructure(
-        product.productUrl,
-        structure.children,
-        semiSuppliers,
-        fetchHtml,
-        pageResults,
-      );
+      const child$ = await fetchPage(product.productUrl, fetchHtml, pageResults);
+      if (child$) {
+        const childProducts = await parseStructure(
+          child$,
+          product.productUrl,
+          structure.children,
+          semiSuppliers,
+          fetchHtml,
+          pageResults,
+        );
 
-      results.push(...childProducts);
+        results.push(...childProducts);
+      }
     }
   }
 
@@ -91,10 +113,21 @@ export async function scrape(
   const pageResults: PageResult[] = [];
 
   for (const pageUrl of pageUrls) {
+    // Fetched once and reused for every configured structure. Structures
+    // are alternative selector sets for the SAME page (e.g. two different
+    // product-card markups on one listing), not separate pages — refetching
+    // per structure doubled outbound requests to the same URL and could let
+    // one structure's fetch land in a 429 window while the other's fetch,
+    // moments later, cleared it. That produced inconsistent success/failure
+    // for what's really one page (confirmed on Tria Technologies: structure
+    // #1 intermittently 429'd while structure #2's separate fetch of the
+    // same URL came back success).
+    const $ = await fetchPage(pageUrl, fetchHtml, pageResults);
+    if (!$) continue;
 
     for (const structure of scraperConfig.structures) {
-
-      const products = await scrapeStructure(
+      const products = await parseStructure(
+        $,
         pageUrl,
         structure,
         semiSuppliers,
