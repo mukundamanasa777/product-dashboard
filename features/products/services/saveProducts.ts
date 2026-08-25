@@ -138,6 +138,19 @@ export async function saveProducts(
 
       // Unchanged products are intentionally left untouched — no scanRunId
       // stamp, no write at all.
+    }, {
+      // Default is 5s for `timeout` / 2s for `maxWait`. This transaction
+      // does one round trip per row in updatedProducts/expiredProducts, so
+      // a large sync (or a slow connection) can blow past the default and
+      // get killed mid-transaction with P2028 ("Transaction not found")
+      // even though nothing is actually wrong with the writes themselves.
+      // NOTE: if writes still fail with P2028 after this, the cause is a
+      // connection pooler in *transaction* mode (e.g. Supabase :6543 /
+      // PgBouncer transaction pooling) sitting in front of DATABASE_URL —
+      // interactive transactions need a session-capable connection
+      // (session pooler or direct host), and no timeout value fixes that.
+      timeout: 30_000,
+      maxWait: 10_000,
     });
 
     console.log("Database Sync Completed");
