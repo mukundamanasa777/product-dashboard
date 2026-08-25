@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
+# Prisma postinstall needs the schema
+COPY prisma ./prisma
+
 RUN npm ci
 
 COPY . .
