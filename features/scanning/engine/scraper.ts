@@ -3,7 +3,11 @@ import { loadHtml } from "../utils/html";
 import { extractProducts } from "./extractor";
 import { ScraperConfig, StructureConfig } from "../types/scraper";
 import type { ScrapedProduct } from "@/features/products/types/product";
-import { classifyPageError, type PageResult } from "../utils/pageResult";
+import {
+  classifyPageError,
+  looksLikeBotChallenge,
+  type PageResult,
+} from "../utils/pageResult";
 
 export type FetchHtml = (url: string) => Promise<string>;
 
@@ -40,11 +44,12 @@ async function fetchPage(
   const $ = loadHtml(html);
 
   // TEMP DEBUG — remove once the Railway-vs-local product mismatch for
-  // Tria Technologies is root-caused. Logs a snippet of what actually came
-  // back, so a Cloudflare/anti-bot challenge page (vs. real markup) is
-  // visible in Railway logs.
+  // Tria Technologies is root-caused. htmlLength + looksLikeBotChallenge
+  // give an at-a-glance verdict (a genuine page is normally tens/hundreds
+  // of KB; a challenge page is usually tiny); the snippet is there so you
+  // can eyeball the actual markup when the verdict alone isn't enough.
   console.log(
-    `[scrape-debug] url=${pageUrl} htmlLength=${html.length}`,
+    `[scrape-debug] url=${pageUrl} htmlLength=${html.length} looksLikeBotChallenge=${looksLikeBotChallenge(html)}`,
   );
   console.log("[scrape-debug] HTML snippet:", $.html().slice(0, 800));
 

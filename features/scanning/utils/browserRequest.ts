@@ -45,7 +45,7 @@ export async function createBrowserFetcher(
   throttle: boolean = false,
 ) {
   const browser: Browser = await chromium.launch();
-  const waitSelector = waitForSelectors.filter(Boolean).join(", ");
+  const distinctWaitSelectors = [...new Set(waitForSelectors.filter(Boolean))];
 
   // Tracked per browser instance (i.e. per scrapeProducts() call) so pacing
   // applies across this manufacturer's whole run, not per-call from zero.
@@ -70,12 +70,26 @@ export async function createBrowserFetcher(
         timeout: 30_000,
       });
 
-      if (waitSelector) {
-        // Swallow the timeout rather than throw: if the selector never
-        // shows up, we still return whatever rendered so far — same
-        // "0 products found" outcome as the axios path gets for a page
-        // that genuinely has none, rather than failing the whole scan.
-        await page.waitForSelector(waitSelector, { timeout: 15_000 }).catch(() => {});
+      if (distinctWaitSelectors.length > 0) {
+        // Waited on independently, NOT joined into one "selA, selB" OR
+        // selector. A joined selector resolves as soon as ANY one of them
+        // appears — so a fast, server-rendered section matching structure
+        // A's selector would satisfy the wait immediately and cut the
+        // snapshot short before structure B's slower-to-hydrate content
+        // (e.g. a client-side carousel widget) ever rendered, even though
+        // it does show up given enough time. Confirmed on Tria
+        // Technologies: the Elementor hero section (structure TRIA-2's
+        // selector) resolved instantly while the `.v1-product` carousel
+        // (structure TARA-1's selector) was still empty, so TARA-1 came up
+        // with 0 matches on a page that genuinely does have real products
+        // once fully rendered. Waiting on each selector in parallel gives
+        // every structure its own full timeout window regardless of how
+        // fast (or slow) the others resolve.
+        await Promise.all(
+          distinctWaitSelectors.map((selector) =>
+            page.waitForSelector(selector, { timeout: 15_000 }).catch(() => {}),
+          ),
+        );
       }
 
       const html = await page.content();

@@ -30,6 +30,24 @@ export function classifyPageError(error: unknown): PageStatus {
   return "failed";
 }
 
+// Same phrase list browserRequest.ts's looksBlocked check uses for
+// Playwright fetches. Kept here too so the plain axios path (request.ts,
+// via scraper.ts's fetchPage) and any other future fetcher can flag a
+// bot-challenge page by content, not just by HTTP status — some challenge
+// modes return a normal 200.
+const BOT_CHALLENGE_PATTERN =
+  /just a moment|checking your browser|attention required|cf-browser-verification|verify you are human|are you a robot|enable javascript and cookies|access denied|ddos protection by|one more step/i;
+
+/**
+ * Heuristic only — a false "no" just means none of these known phrases
+ * happened to be in this particular challenge page, not that the HTML is
+ * definitely real product markup. Useful for a quick log-line verdict;
+ * for a real answer, read the actual [scrape-debug] HTML snippet.
+ */
+export function looksLikeBotChallenge(html: string): boolean {
+  return BOT_CHALLENGE_PATTERN.test(html);
+}
+
 export function summarizePageResults(pageResults: PageResult[]): PageResultSummary {
   return pageResults.reduce<PageResultSummary>(
     (summary, page) => {
