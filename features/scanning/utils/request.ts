@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getAxiosProxyConfig } from "./proxyConfig";
 
 // A bare "Mozilla/5.0" (the old value here) is not what any real browser
 // actually sends — it's a well-known bot fingerprint on its own, before
@@ -26,6 +27,8 @@ export async function request(url: string) {
     // this, a hung server just hangs the worker indefinitely instead of
     // ever surfacing as a countable "timeout" page result.
     timeout: 30_000,
+    // No-op unless SCRAPE_PROXY_URL is set — see proxyConfig.ts.
+    proxy: getAxiosProxyConfig(),
   });
 
   return response.data;

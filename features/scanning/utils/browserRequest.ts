@@ -1,4 +1,5 @@
 import { chromium, type Browser } from "playwright";
+import { getPlaywrightProxyConfig } from "./proxyConfig";
 
 // Cloudflare (and similar bot-protection) rate-limits by cadence, not just
 // volume — firing every category page back-to-back reads as a bot and gets
@@ -44,7 +45,10 @@ export async function createBrowserFetcher(
   waitForSelectors: string[],
   throttle: boolean = false,
 ) {
-  const browser: Browser = await chromium.launch();
+  // No-op unless SCRAPE_PROXY_URL is set — see proxyConfig.ts.
+  const browser: Browser = await chromium.launch({
+    proxy: getPlaywrightProxyConfig(),
+  });
   const distinctWaitSelectors = [...new Set(waitForSelectors.filter(Boolean))];
 
   // Tracked per browser instance (i.e. per scrapeProducts() call) so pacing
