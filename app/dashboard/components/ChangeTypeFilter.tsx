@@ -80,7 +80,7 @@ export function ChangeTypeFilter({
         </Combobox.DropdownTarget>
 
         <Combobox.Dropdown>
-          <Combobox.Options>
+          <Combobox.Options mah={200} style={{ overflowY: "auto" }}>
             {isLoading ? (
               <Combobox.Empty>
                 <Loader size="xs" />

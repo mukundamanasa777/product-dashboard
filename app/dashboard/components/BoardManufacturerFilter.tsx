@@ -6,18 +6,31 @@ import {
   Combobox,
   Group,
   Loader,
-  Pagination,
   Pill,
   PillsInput,
   Stack,
   Text,
   useCombobox,
 } from "@mantine/core";
-import { useGetBoardManufacturersQuery } from "@/lib/redux/api";
+import { useLazyGetBoardManufacturersQuery } from "@/lib/redux/api";
 import type { BoardManufacturerOption } from "../types";
 
-const PAGE_SIZE = 5;
+// Was 5 — too small: the dropdown's options box has a fixed 200px max
+// height (see mah below — an unrelated number, pixels vs. item count,
+// that just happens to also be 200), and 5 rows can fit inside 200px
+// without ever overflowing it. A non-overflowing container never fires
+// scroll events, so the "load more on scroll" logic below could never
+// even trigger — scrolling looked broken because there was nothing to
+// scroll yet. 200 means essentially every realistic manufacturer count
+// comes back in one fetch, so the box is reliably scrollable from the
+// start and barely depends on the load-more mechanism at all; that stays
+// in place as a safety net for searches matching more than that.
+const PAGE_SIZE = 200;
 const SEARCH_DEBOUNCE_MS = 300;
+// Load the next page once the user has scrolled within this many pixels of
+// the bottom of the dropdown, rather than waiting until they hit the exact
+// end (which can feel like scrolling into a wall).
+const LOAD_MORE_THRESHOLD_PX = 40;
 
 interface BoardManufacturerFilterProps {
   selected: BoardManufacturerOption[];
@@ -32,7 +45,14 @@ export function BoardManufacturerFilter({
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(1);
+
+  const [options, setOptions] = useState<BoardManufacturerOption[]>([]);
+  const [total, setTotal] = useState(0);
+  // 0 = nothing loaded yet for the current search term.
+  const [loadedPage, setLoadedPage] = useState(0);
+
+  const [fetchManufacturers, { isFetching }] =
+    useLazyGetBoardManufacturersQuery();
 
   useEffect(() => {
     const timeout = setTimeout(
@@ -42,16 +62,40 @@ export function BoardManufacturerFilter({
     return () => clearTimeout(timeout);
   }, [search]);
 
-  const { data, isFetching } = useGetBoardManufacturersQuery({
-    search: debouncedSearch || undefined,
-    page,
-    pageSize: PAGE_SIZE,
-  });
-  const options = data?.items ?? [];
-  const total = data?.total ?? 0;
+  // Fetches page 1 fresh whenever the debounced search term changes,
+  // replacing whatever was loaded for the previous term — same "fetch
+  // data in an effect" shape react.dev itself documents. The state update
+  // happens in the fetch's own .then() callback, not synchronously in the
+  // effect body, which is what keeps this off
+  // react-hooks/set-state-in-effect (that rule flags setState called
+  // directly in an effect's body, not in an async callback it kicks off).
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchManufacturers({
+      search: debouncedSearch || undefined,
+      page: 1,
+      pageSize: PAGE_SIZE,
+    })
+      .unwrap()
+      .then((data) => {
+        if (cancelled) return;
+        setOptions(data.items);
+        setTotal(data.total);
+        setLoadedPage(1);
+      })
+      .catch(() => {
+        // Combobox.Empty's "No board manufacturers found" covers a failed
+        // fetch too — nothing further to show here.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, fetchManufacturers]);
 
   const selectedIds = new Set(selected.map((s) => s.id));
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasMore = options.length < total;
 
   function toggleOption(option: BoardManufacturerOption) {
     if (selectedIds.has(option.id)) {
@@ -63,6 +107,31 @@ export function BoardManufacturerFilter({
 
   function removeSelected(id: number) {
     onChange(selected.filter((s) => s.id !== id));
+  }
+
+  function loadMore() {
+    if (isFetching || !hasMore) return;
+    const nextPage = loadedPage + 1;
+
+    fetchManufacturers({
+      search: debouncedSearch || undefined,
+      page: nextPage,
+      pageSize: PAGE_SIZE,
+    })
+      .unwrap()
+      .then((data) => {
+        setOptions((prev) => [...prev, ...data.items]);
+        setTotal(data.total);
+        setLoadedPage(nextPage);
+      })
+      .catch(() => {});
+  }
+
+  function handleOptionsScroll(event: React.UIEvent<HTMLDivElement>) {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < LOAD_MORE_THRESHOLD_PX) {
+      loadMore();
+    }
   }
 
   return (
@@ -94,7 +163,6 @@ export function BoardManufacturerFilter({
                   placeholder="Search board manufacturers..."
                   value={search}
                   onChange={(event) => {
-                    setPage(1);
                     setSearch(event.currentTarget.value);
                     combobox.openDropdown();
                   }}
@@ -106,39 +174,42 @@ export function BoardManufacturerFilter({
         </Combobox.DropdownTarget>
 
         <Combobox.Dropdown>
-          <Combobox.Options>
-            {isFetching ? (
+          <Combobox.Options
+            mah={200}
+            style={{ overflowY: "auto" }}
+            onScroll={handleOptionsScroll}
+          >
+            {options.length === 0 ? (
               <Combobox.Empty>
-                <Loader size="xs" />
+                {isFetching ? <Loader size="xs" /> : "No board manufacturers found"}
               </Combobox.Empty>
-            ) : options.length === 0 ? (
-              <Combobox.Empty>No board manufacturers found</Combobox.Empty>
             ) : (
-              options.map((option) => (
-                <Combobox.Option
-                  value={String(option.id)}
-                  key={option.id}
-                  active={selectedIds.has(option.id)}
-                >
-                  <Group gap="xs">
-                    {selectedIds.has(option.id) && <CheckIcon size={12} />}
-                    <span>{option.name}</span>
+              <>
+                {options.map((option) => (
+                  <Combobox.Option
+                    value={String(option.id)}
+                    key={option.id}
+                    active={selectedIds.has(option.id)}
+                  >
+                    <Group gap="xs">
+                      {selectedIds.has(option.id) && <CheckIcon size={12} />}
+                      <span>{option.name}</span>
+                    </Group>
+                  </Combobox.Option>
+                ))}
+                {/* Reaching this branch at all means options is non-empty,
+                    which only happens after page 1 has already resolved —
+                    so any isFetching here is necessarily a load-more, not
+                    the initial fetch (that one's covered by Combobox.Empty
+                    above instead, since there's nothing to show yet). */}
+                {isFetching && (
+                  <Group justify="center" py="xs">
+                    <Loader size="xs" />
                   </Group>
-                </Combobox.Option>
-              ))
+                )}
+              </>
             )}
           </Combobox.Options>
-          {totalPages > 1 && (
-            <Combobox.Footer>
-              <Pagination
-                total={totalPages}
-                value={page}
-                onChange={setPage}
-                size="xs"
-                withEdges
-              />
-            </Combobox.Footer>
-          )}
         </Combobox.Dropdown>
       </Combobox>
     </Stack>

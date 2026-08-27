@@ -258,6 +258,7 @@ export const {
   useRejectProductMutation,
   useCheckProductLinksMutation,
   useGetBoardManufacturersQuery,
+  useLazyGetBoardManufacturersQuery,
   useGetSemiSuppliersQuery,
   useGetChangeTypesQuery,
   useGetScanRunsQuery,
