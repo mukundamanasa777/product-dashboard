@@ -51,19 +51,24 @@ export async function markFailed(id: number, errorMessage: string) {
 }
 
 export interface FindManyPaginatedParams {
-  triggerSource?: TriggerSource;
+  triggerSources?: TriggerSource[];
+  statuses?: LinkCheckStatus[];
   page: number;
   pageSize: number;
   sort?: ParsedSort<"startedAt">;
 }
 
 export async function findManyPaginated({
-  triggerSource,
+  triggerSources,
+  statuses,
   page,
   pageSize,
   sort,
 }: FindManyPaginatedParams) {
-  const where = triggerSource ? { triggerSource } : {};
+  const where = {
+    ...(triggerSources?.length ? { triggerSource: { in: triggerSources } } : {}),
+    ...(statuses?.length ? { status: { in: statuses } } : {}),
+  };
 
   const [items, total] = await Promise.all([
     prisma.linkCheckRun.findMany({

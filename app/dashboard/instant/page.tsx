@@ -12,10 +12,19 @@ import {
   Title,
 } from "@mantine/core";
 import { ScanRunsTable } from "../components/ScanRunsTable";
+import { ScheduleSettingsCard } from "../components/ScheduleSettingsCard";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useTriggerScanMutation } from "@/lib/redux/api";
 
-export default function InstantTriggeringPage() {
+/**
+ * Scan Triggering — manual trigger + schedule settings + one run-history
+ * table covering both trigger sources, same shape as the Link Check page
+ * (see its comment for why: one page, one table, a Trigger column instead
+ * of a route split). Used to be split across this page (Instant Triggering)
+ * and a separate Scheduled Triggering page/route, each rendering its own
+ * ScanRunsTable filtered by triggerSource.
+ */
+export default function ScanTriggeringPage() {
   const [triggerScan, { isLoading: triggering }] = useTriggerScanMutation();
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -50,6 +59,8 @@ export default function InstantTriggeringPage() {
         )}
       </Card>
 
+      <ScheduleSettingsCard />
+
       <Suspense
         fallback={
           <Center py="xl">
@@ -57,7 +68,7 @@ export default function InstantTriggeringPage() {
           </Center>
         }
       >
-        <ScanRunsTable triggerSource="MANUAL" />
+        <ScanRunsTable />
       </Suspense>
 
       <ConfirmDialog

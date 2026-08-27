@@ -14,7 +14,6 @@ import {
 } from "@mantine/core";
 import {
   IconBolt,
-  IconClock,
   IconCube,
   IconFileUpload,
   IconLink,
@@ -52,15 +51,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       {
         value: "instant",
-        label: "Instant Triggering",
+        label: "Scan Triggering",
         href: "/dashboard/instant",
         icon: <IconBolt size={18} />,
-      },
-      {
-        value: "scheduled",
-        label: "Scheduled Triggering",
-        href: "/dashboard/scheduled",
-        icon: <IconClock size={18} />,
       },
       {
         value: "link-check",

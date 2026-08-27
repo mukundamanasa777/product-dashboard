@@ -19,12 +19,10 @@ import { LinkCheckRunsTable } from "../components/LinkCheckRunsTable";
 import { useCheckProductLinksMutation } from "@/lib/redux/api";
 
 /**
- * Dedicated page for the "Check All Links" job — the link-check equivalent
- * of /dashboard/instant + /dashboard/scheduled combined into one page
- * (link checks aren't scoped to a manufacturer, so there's no need to
- * split instant/scheduled triggering across two pages the way scanning
- * does; one page with a trigger card, a schedule card, and one run-history
- * table covering both trigger sources is enough).
+ * Dedicated page for the "Check All Links" job — same shape as
+ * /dashboard/instant (Scan Triggering): one page with a trigger card, a
+ * schedule card, and one run-history table covering both trigger sources,
+ * rather than splitting manual/scheduled triggering across two pages.
  */
 export default function LinkCheckPage() {
   const [checkProductLinks, { isLoading: triggering }] =
@@ -54,10 +52,7 @@ export default function LinkCheckPage() {
           <div>
             <Title order={5}>Check All Links Now</Title>
             <Text size="sm" c="dimmed">
-              Fetches every active product&apos;s URL right away and flags any
-              that aren&apos;t working as Not Found, moving them to Pending
-              for review. Runs in the background — this can take a while for
-              a large catalog.
+              Checks all product URLs and marks unavailable ones as Not Found for review.
             </Text>
           </div>
           <Button onClick={() => setConfirmOpen(true)} loading={triggering}>

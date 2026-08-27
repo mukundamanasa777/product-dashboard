@@ -95,7 +95,26 @@ export type ScanStatus =
   | "FAILED"
   | "RUNNING";
 
+// RUNNING excluded — legacy value superseded by PENDING/PROCESSING, not
+// produced by application code (see ScanStatus's schema comment). Not worth
+// offering as a filter option since it can never actually match anything.
+export const SCAN_STATUSES: ScanStatus[] = [
+  "PENDING",
+  "PROCESSING",
+  "SUCCESS",
+  "FAILED",
+];
+
+export const LINK_CHECK_STATUSES: LinkCheckStatus[] = [
+  "PENDING",
+  "PROCESSING",
+  "SUCCESS",
+  "FAILED",
+];
+
 export type TriggerSource = "MANUAL" | "SCHEDULED";
+
+export const TRIGGER_SOURCES: TriggerSource[] = ["MANUAL", "SCHEDULED"];
 
 export interface ScanRunDTO {
   id: number;

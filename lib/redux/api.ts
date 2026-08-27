@@ -5,11 +5,13 @@ import type {
   FileUploadsResponse,
   LinkCheckRunsResponse,
   LinkCheckScheduleDTO,
+  LinkCheckStatus,
   ProductDTO,
   ProductsResponse,
   ProductStatus,
   ScanRunsResponse,
   ScanScheduleDTO,
+  ScanStatus,
   ScheduleFrequency,
   SemiSupplierOption,
   TriggerSource,
@@ -34,16 +36,21 @@ export interface BoardManufacturersQueryArgs {
   pageSize: number;
 }
 
+// Scan Triggering is one page showing every run together (manual +
+// scheduled) with a Trigger column, same as link check below, rather than
+// a split Instant/Scheduled view across two pages — these are filters on
+// that one combined view, not a route split.
 export interface ScanRunsQueryArgs {
-  triggerSource: TriggerSource;
+  triggerSources?: TriggerSource[];
+  boardManufacturerIds?: number[];
+  statuses?: ScanStatus[];
   page: number;
   pageSize: number;
 }
 
-// Unlike ScanRunsQueryArgs, this has no triggerSource — link checks get one
-// dedicated page showing every run together (manual + scheduled), not a
-// split Instant/Scheduled view like scanning has.
 export interface LinkCheckRunsQueryArgs {
+  triggerSources?: TriggerSource[];
+  statuses?: LinkCheckStatus[];
   page: number;
   pageSize: number;
 }
@@ -168,18 +175,25 @@ export const api = createApi({
     }),
 
     getScanRuns: builder.query<ScanRunsResponse, ScanRunsQueryArgs>({
-      query: (params) => ({ url: "scan-runs", params }),
-      providesTags: (_result, _error, args) => [
-        { type: "ScanRun", id: args.triggerSource },
-      ],
+      query: ({ triggerSources, boardManufacturerIds, statuses, ...rest }) => ({
+        url: "scan-runs",
+        params: {
+          ...rest,
+          ...(triggerSources?.length
+            ? { triggerSources: triggerSources.join(",") }
+            : {}),
+          ...(boardManufacturerIds?.length
+            ? { boardManufacturerIds: boardManufacturerIds.join(",") }
+            : {}),
+          ...(statuses?.length ? { statuses: statuses.join(",") } : {}),
+        },
+      }),
+      providesTags: [{ type: "ScanRun", id: "LIST" }],
     }),
 
     triggerScan: builder.mutation<TriggerScanResult, void>({
       query: () => ({ url: "scrape", method: "POST", body: {} }),
-      invalidatesTags: [
-        { type: "ScanRun", id: "MANUAL" },
-        { type: "ScanRun", id: "SCHEDULED" },
-      ],
+      invalidatesTags: [{ type: "ScanRun", id: "LIST" }],
     }),
 
     getSchedule: builder.query<ScanScheduleDTO, void>({
@@ -196,7 +210,16 @@ export const api = createApi({
       LinkCheckRunsResponse,
       LinkCheckRunsQueryArgs
     >({
-      query: (params) => ({ url: "link-check-runs", params }),
+      query: ({ triggerSources, statuses, ...rest }) => ({
+        url: "link-check-runs",
+        params: {
+          ...rest,
+          ...(triggerSources?.length
+            ? { triggerSources: triggerSources.join(",") }
+            : {}),
+          ...(statuses?.length ? { statuses: statuses.join(",") } : {}),
+        },
+      }),
       providesTags: [{ type: "LinkCheckRun", id: "LIST" }],
     }),
 

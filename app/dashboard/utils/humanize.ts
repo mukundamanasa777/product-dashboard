@@ -36,6 +36,23 @@ export const STATUS_DESCRIPTIONS: Record<string, string> = {
   BLOCKED: "Reviewed and excluded from the active catalog",
 };
 
+// Same "tooltip on the filter chip" role as STATUS_DESCRIPTIONS, for the
+// Scan Triggering run-status filter.
+export const SCAN_STATUS_DESCRIPTIONS: Record<string, string> = {
+  PENDING: "Queued — not yet picked up by the worker",
+  PROCESSING: "Currently scraping this manufacturer",
+  SUCCESS: "Finished without error",
+  FAILED: "Finished with an error — see the run's tooltip for details",
+};
+
+// Same role, for the Link Check run-status filter.
+export const LINK_CHECK_STATUS_DESCRIPTIONS: Record<string, string> = {
+  PENDING: "Queued — not yet picked up by the worker",
+  PROCESSING: "Currently checking product URLs",
+  SUCCESS: "Finished without error",
+  FAILED: "Finished with an error — see the run's tooltip for details",
+};
+
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return "—";
 

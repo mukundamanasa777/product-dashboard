@@ -78,20 +78,28 @@ export async function markFailed(
 }
 
 export interface FindManyPaginatedParams {
-  triggerSource?: TriggerSource;
+  triggerSources?: TriggerSource[];
+  boardManufacturerIds?: number[];
+  statuses?: ScanStatus[];
   page: number;
   pageSize: number;
   sort?: ParsedSort<"startedAt">;
 }
 
 export async function findManyPaginated({
-  triggerSource,
+  triggerSources,
+  boardManufacturerIds,
+  statuses,
   page,
   pageSize,
   sort,
 }: FindManyPaginatedParams) {
   const where: Prisma.ScanRunWhereInput = {
-    ...(triggerSource ? { triggerSource } : {}),
+    ...(triggerSources?.length ? { triggerSource: { in: triggerSources } } : {}),
+    ...(boardManufacturerIds?.length
+      ? { boardManufacturerId: { in: boardManufacturerIds } }
+      : {}),
+    ...(statuses?.length ? { status: { in: statuses } } : {}),
   };
 
   const [items, total] = await Promise.all([
